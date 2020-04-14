@@ -1,0 +1,15 @@
+{
+  "name": "korokjs",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "test",
+    "server": ""
+  },
+  "scripts": {
+    "server": "node --inspect server/main"
+  },
+  "author": "",
+  "license": "MIT"
+}

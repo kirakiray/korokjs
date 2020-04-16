@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>korokjs test</title>
-    <script src="../src/korok.js"></script>
+    <script src="../dist/korok.js"></script>
 </head>
 
 <body>
@@ -14,7 +14,22 @@
     <script>
         let korok = new Korok();
 
+        korok.on("msg", (e) => {
+            console.log("korok client msg =>", e);
+
+            // 转发数据
+            if (e.from && e.data == "1") {
+                setTimeout(() => {
+                    e.from.send("回传数据，哈哈");
+                }, 300);
+            }
+        });
+
         korok.init();
+
+        korok.on("leafs-change", e => {
+            console.log("leafs-change =>", e, korok.leafs);
+        });
     </script>
 </body>
 

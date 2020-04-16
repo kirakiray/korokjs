@@ -4,12 +4,15 @@
   "description": "",
   "main": "index.js",
   "directories": {
-    "test": "test",
-    "server": ""
+    "test": "test"
   },
   "scripts": {
-    "server": "node --inspect server/main"
+    "server": "node --inspect server/main",
+    "watch": "node scripts/watch.js"
   },
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "js-beautify": "^1.10.0"
+  }
 }

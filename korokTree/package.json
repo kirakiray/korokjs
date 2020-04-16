@@ -2,12 +2,12 @@
   "name": "korokforest",
   "version": "0.1.0",
   "description": "",
-  "main": "korokForest.js",
+  "main": "korokTree.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "faye-websocket": "^0.11.3"
   }

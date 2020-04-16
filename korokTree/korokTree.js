@@ -2,18 +2,32 @@
 const WebSocket = require('faye-websocket'),
     http = require('http'),
     EventEmitter = require('events');
+const KorokLeaf = require("./KorokLeaf");
 
-class KorokForest extends EventEmitter {
+class KorokTree extends EventEmitter {
     // 默认端口
     port = 8811;
-    // 存储tree数组
-    trees = []
+    // 存储leaf数组
+    leafs = new Set()
     constructor() {
         super();
 
         // 本地的permit函数，默认全部同行
         // 可以替换本地函数后提供拦截功能
         this.onpermit = (e) => new Promise(res => res({ pass: true }));
+
+        // 关闭修正
+        this.on("leaf-close", (e) => {
+            // 通知干掉相应id
+            this.leafs.forEach(leaf => {
+                leaf.ws.send(leaf._encry({
+                    type: "deleteleaf",
+                    data: {
+                        id: e.leaf.id
+                    }
+                }));
+            });
+        });
     }
     // 初始化函数
     init() {
@@ -35,8 +49,23 @@ class KorokForest extends EventEmitter {
                     }
 
                     // 记录发送数据
-                    let kt = new KorokTree({ request, socket, body });
-                    this.trees.push(kt)
+                    let kt = new KorokLeaf({
+                        request, socket, body,
+                        tree: this
+                    });
+
+                    // 给其他leafs发送添加指令
+                    this.leafs.forEach(leaf => {
+                        leaf.ws.send(leaf._encry({
+                            type: "addleaf",
+                            data: {
+                                id: kt.id
+                            }
+                        }));
+                    });
+
+                    // 新增leafs
+                    this.leafs.add(kt)
                 }
             });
 
@@ -45,29 +74,4 @@ class KorokForest extends EventEmitter {
     }
 }
 
-class KorokTree extends EventEmitter {
-    constructor({ request, socket, body }) {
-        super();
-
-        var ws = this.ws = new WebSocket(request, socket, body);
-
-        ws.on('message', (event) => {
-
-        });
-
-        ws.on('close', (event) => {
-            console.log('close', event.code, event.reason);
-            ws = null;
-        });
-    }
-
-    // 发送数据
-    send(data) {
-        this.ws.send(JSON.stringify({
-            type: "msg",
-            data
-        }));
-    }
-}
-
-module.exports = KorokForest;
+module.exports = KorokTree;

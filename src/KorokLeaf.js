@@ -10,10 +10,23 @@ class KorokLeaf extends SimpleEvent {
         this[CONNECTTYPE] = "ws";
         this[LEAFID] = opt.id;
         this.korok = korok;
+
+        this[INFOS] = {};
     }
 
     get id() {
         return this[LEAFID];
+    }
+
+    get infos() {
+        return new Proxy(this[INFOS], {
+            get(obj, prop) {
+                return obj[prop];
+            },
+            set() {
+                return true;
+            }
+        });
     }
 
     // 发送数据

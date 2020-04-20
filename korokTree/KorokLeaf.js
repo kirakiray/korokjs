@@ -71,6 +71,16 @@ class KorokLeaf extends EventEmitter {
                     this.emit("repost", opt2);
                     tree.emit("repost", opt2);
                     break;
+                case "setInfos":
+                    Array.from(tree.leafs).forEach(leaf => {
+                        // 信息更新到所有的节点上
+                        (this.id != leaf.id) && leaf.ws.send(leaf._encry({
+                            type: "updateleaf",
+                            id: this.id,
+                            data: d.data
+                        }));
+                    })
+                    break;
             }
         });
 

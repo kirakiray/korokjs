@@ -3,6 +3,7 @@ const KOROKID = Symbol("korokId");
 const STATE = Symbol("state");
 const PTIMER = Symbol("p_timer");
 const LEAFS = Symbol("leafs");
+const INFOS = Symbol("infos");
 
 class Korok extends SimpleEvent {
     constructor() {
@@ -14,6 +15,33 @@ class Korok extends SimpleEvent {
         this[STATE] = "pendding";
         // 同辈
         this[LEAFS] = [];
+        // 自有信息
+        this[INFOS] = new Proxy({
+            ua: ""
+        }, {
+            get(obj, prop) {
+                return obj[prop];
+            },
+            set: (obj, prop, value) => {
+                // 禁用set
+                obj[prop] = value;
+
+                let data = {
+                    [prop]: value
+                };
+
+                // 更新leafs上的数据
+                this.leafs.find(e => e.id === this.id)[INFOS][prop] = value;
+
+                // 发送信息
+                this.socket && this.socket.send(this._encry({
+                    type: "setInfos",
+                    data
+                }));
+
+                return true;
+            }
+        });
     }
 
     get id() {
@@ -35,9 +63,14 @@ class Korok extends SimpleEvent {
         return this[LEAFS].filter(e => e.id !== this.id);
     }
 
+    get infos() {
+        return this[INFOS]
+    }
+
     // 初始化
     init() {
         // 多窗口数据数据同步库
+        debugger
         const socket = this.socket = new WebSocket(/^ws/.test(this.url) ? this.url : `ws://${this.url}`);
 
         socket.onmessage = (e) => {
@@ -51,6 +84,9 @@ class Korok extends SimpleEvent {
                         this[LEAFS].push(new KorokLeaf(opt, this));
                     });
                     this.emit("finish");
+
+                    // 添加私有信息
+                    this.infos.ua = navigator.userAgent;
                     break;
                 case "msg":
                     let opt2 = {
@@ -75,6 +111,18 @@ class Korok extends SimpleEvent {
                     this.emit("leafs-change", {
                         type: "deleteleaf",
                         leaf: removeLeaf
+                    });
+                    break;
+                case "updateleaf":
+                    let targetData = this.leafs.find(e => e.id === d.id);
+
+                    targetData && Object.assign(targetData[INFOS], d.data);
+
+                    this.emit("leafs-change", {
+                        type: "updateleaf",
+                        leaf: targetData,
+                        prop: d.prop,
+                        value: d.value
                     });
                     break;
                 case "pong":

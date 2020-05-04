@@ -70,8 +70,8 @@ class Korok extends SimpleEvent {
     // 初始化
     init() {
         // 多窗口数据数据同步库
-        debugger
         const socket = this.socket = new WebSocket(/^ws/.test(this.url) ? this.url : `ws://${this.url}`);
+        socket.binaryType = "arraybuffer";
 
         socket.onmessage = (e) => {
             let d = this._decry(e.data);
@@ -155,10 +155,15 @@ class Korok extends SimpleEvent {
 
     // 加密操作
     _encry(obj) {
-        return JSON.stringify(obj);
+        let str = JSON.stringify(obj);
+
+        // 转buffer
+        return (new TextEncoder().encode(str)).buffer;
     }
     // 解密数据
-    _decry(str) {
+    _decry(buffer) {
+        let str = new TextDecoder().decode(buffer);
+
         return JSON.parse(str);
     }
     // 发送数据

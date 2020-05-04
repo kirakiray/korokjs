@@ -108,11 +108,14 @@ class KorokLeaf extends EventEmitter {
     }
     // 加密数据
     _encry(data) {
-        return JSON.stringify(data);
+        let str = JSON.stringify(data);
+        let ab = new TextEncoder().encode(str);
+        return new Buffer(ab);
     }
     // 解密数据
-    _decry(str) {
-        return JSON.parse(str);
+    _decry(buffer) {
+        let jsonStr = new TextDecoder().decode(buffer);
+        return JSON.parse(jsonStr);
     }
 }
 

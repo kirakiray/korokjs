@@ -4,9 +4,18 @@ const STATE = Symbol("state");
 const PTIMER = Symbol("p_timer");
 const LEAFS = Symbol("leafs");
 const INFOS = Symbol("infos");
+const AESKEY = Symbol("aeskey");
+const STARTAES = Symbol("startAes");
+
+const aesKey = { "alg": "A256CBC", "ext": true, "k": "ibJDVo9mj-bWVDtY_ed8GwvlOfFuCsTpJYq4W6U-x1Q", "key_ops": ["encrypt", "decrypt"], "kty": "oct" };
+const iv = new Uint8Array([94, 206, 139, 176, 239, 198, 216, 25, 191, 15, 7, 167, 122, 45, 38, 155]);
 
 class Korok extends SimpleEvent {
-    constructor() {
+    constructor(opts = {}) {
+        let defaults = {
+            encryption: true
+        };
+        Object.assign(defaults, opts);
         super();
         // 远程链接地址
         this.url = "localhost:8811";
@@ -34,14 +43,29 @@ class Korok extends SimpleEvent {
                 this.leafs.find(e => e.id === this.id)[INFOS][prop] = value;
 
                 // 发送信息
-                this.socket && this.socket.send(this._encry({
-                    type: "setInfos",
-                    data
-                }));
+                this.socket && (async () => {
+                    this.socket.send(await this._encry({
+                        type: "setInfos",
+                        data
+                    }));
+                })()
 
                 return true;
             }
         });
+
+        if (defaults.encryption) {
+            this.encryption = true;
+
+            this[AESKEY] = "";
+
+            // 设置生成key
+            this[STARTAES] = crypto.subtle.importKey("jwk",
+                aesKey,
+                "AES-CBC",
+                true,
+                ["encrypt", "decrypt"]);
+        }
     }
 
     get id() {
@@ -68,13 +92,13 @@ class Korok extends SimpleEvent {
     }
 
     // 初始化
-    init() {
+    async init() {
         // 多窗口数据数据同步库
         const socket = this.socket = new WebSocket(/^ws/.test(this.url) ? this.url : `ws://${this.url}`);
         socket.binaryType = "arraybuffer";
 
-        socket.onmessage = (e) => {
-            let d = this._decry(e.data);
+        socket.onmessage = async (e) => {
+            let d = await this._decry(e.data);
 
             switch (d.type) {
                 case "init":
@@ -146,29 +170,59 @@ class Korok extends SimpleEvent {
         }
 
         // 日常pingpang操作
-        this[PTIMER] = setInterval(() => {
-            socket.send(this._encry({
+        this[PTIMER] = setInterval(async () => {
+            socket.send(await this._encry({
                 type: "ping"
             }));
         }, 30000);
     }
 
     // 加密操作
-    _encry(obj) {
+    async _encry(obj) {
+        // 转换为字符串
         let str = JSON.stringify(obj);
 
-        // 转buffer
-        return (new TextEncoder().encode(str)).buffer;
+        if (this.encryption) {
+            // 加密内容
+            let encryBuffer = await crypto.subtle.encrypt(
+                {
+                    name: "AES-CBC",
+                    iv
+                },
+                await (this[AESKEY] || this[STARTAES]),
+                new TextEncoder().encode(str)
+            )
+
+            return encryBuffer;
+        } else {
+            // 转buffer
+            return (new TextEncoder().encode(str)).buffer;
+        }
     }
     // 解密数据
-    _decry(buffer) {
-        let str = new TextDecoder().decode(buffer);
+    async _decry(buffer) {
+        if (this.encryption) {
+            // 解密内容
+            let decrypted = await crypto.subtle.decrypt(
+                {
+                    name: "AES-CBC",
+                    iv
+                },
+                await (this[AESKEY] || this[STARTAES]),
+                buffer
+            );
 
-        return JSON.parse(str);
+            let jsonStr = new TextDecoder().decode(decrypted);
+            return JSON.parse(jsonStr);
+        } else {
+            let str = new TextDecoder().decode(buffer);
+            return JSON.parse(str);
+        }
+
     }
     // 发送数据
-    send(data) {
-        this.socket.send(this._encry({
+    async send(data) {
+        this.socket.send(await this._encry({
             type: "msg",
             data
         }));

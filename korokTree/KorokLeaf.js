@@ -1,11 +1,15 @@
 // 用于拼接korok服务端程序
 const WebSocket = require('faye-websocket'),
-    EventEmitter = require('events');
+    EventEmitter = require('events'),
+    { crypto } = require("./webcrypto");
 
 const getRandom = () => Math.random().toString(32).slice(2) + Math.random().toString(32).slice(2);
 
+const aesKey = { "alg": "A256CBC", "ext": true, "k": "ibJDVo9mj-bWVDtY_ed8GwvlOfFuCsTpJYq4W6U-x1Q", "key_ops": ["encrypt", "decrypt"], "kty": "oct" };
+const iv = new Uint8Array([94, 206, 139, 176, 239, 198, 216, 25, 191, 15, 7, 167, 122, 45, 38, 155]);
+
 class KorokLeaf extends EventEmitter {
-    constructor({ request, socket, body, tree }) {
+    constructor({ request, socket, body, tree, encryption = true, defaultAes }) {
         super();
 
         this.tree = tree;
@@ -15,9 +19,23 @@ class KorokLeaf extends EventEmitter {
         // 初始化相应数据
         this.id = getRandom();
 
-        ws.onopen = (e) => {
+        if (encryption) {
+            // 是否加密数据
+            this.encryption = true;
+
+            this.aesKey = "";
+
+            // 初始aes
+            this.startAes = crypto.subtle.importKey("jwk", defaultAes || aesKey,
+                "AES-CBC",
+                true,
+                ["encrypt", "decrypt"])
+        }
+
+
+        ws.onopen = async (e) => {
             // 发送初始配置数据
-            ws.send(this._encry({
+            ws.send(await this._encry({
                 type: "init",
                 // 当前id
                 id: this.id,
@@ -28,8 +46,8 @@ class KorokLeaf extends EventEmitter {
             }));
         }
 
-        ws.on('message', (e) => {
-            let d = this._decry(e.data);
+        ws.on('message', async (e) => {
+            let d = await this._decry(e.data);
 
             switch (d.type) {
                 case "msg":
@@ -41,14 +59,14 @@ class KorokLeaf extends EventEmitter {
                     tree.emit("msg", opt);
                     break;
                 case "ping":
-                    ws.send(this._encry({
+                    ws.send(await this._encry({
                         type: "pong"
                     }));
                     break;
                 case "repost":
                     // 转发接口数据
                     let { leafIds, data } = d;
-                    leafIds && leafIds.forEach(leafId => {
+                    leafIds && leafIds.forEach(async leafId => {
                         let targetLeaf = Array.from(tree.leafs).find(e => e.id == leafId);
 
                         if (!targetLeaf) {
@@ -56,7 +74,7 @@ class KorokLeaf extends EventEmitter {
                         }
 
                         // 数据转发
-                        targetLeaf.ws.send(targetLeaf._encry({
+                        targetLeaf.ws.send(await targetLeaf._encry({
                             type: "msg",
                             data,
                             from: this.id
@@ -72,9 +90,9 @@ class KorokLeaf extends EventEmitter {
                     tree.emit("repost", opt2);
                     break;
                 case "setInfos":
-                    Array.from(tree.leafs).forEach(leaf => {
+                    Array.from(tree.leafs).forEach(async leaf => {
                         // 信息更新到所有的节点上
-                        (this.id != leaf.id) && leaf.ws.send(leaf._encry({
+                        (this.id != leaf.id) && leaf.ws.send(await leaf._encry({
                             type: "updateleaf",
                             id: this.id,
                             data: d.data
@@ -100,22 +118,56 @@ class KorokLeaf extends EventEmitter {
     }
 
     // 发送数据
-    send(data) {
-        this.ws.send(this._encry({
+    async send(data) {
+        this.ws.send(await this._encry({
             type: "msg",
             data
         }));
     }
     // 加密数据
-    _encry(data) {
+    async _encry(data) {
+        // let str = JSON.stringify(data);
+        // let ab = new TextEncoder().encode(str);
+        // return Buffer.from(ab);
+        // 转换为字符串
         let str = JSON.stringify(data);
-        let ab = new TextEncoder().encode(str);
-        return new Buffer(ab);
+
+        if (this.encryption) {
+            // 加密内容
+            let encryBuffer = await crypto.subtle.encrypt(
+                {
+                    name: "AES-CBC",
+                    iv
+                },
+                await (this.aesKey || this.startAes),
+                new TextEncoder().encode(str)
+            )
+
+            return Buffer.from(encryBuffer);
+        } else {
+            // 转buffer
+            return Buffer.from((new TextEncoder().encode(str)));
+        }
     }
     // 解密数据
-    _decry(buffer) {
-        let jsonStr = new TextDecoder().decode(buffer);
-        return JSON.parse(jsonStr);
+    async _decry(buffer) {
+        if (this.encryption) {
+            // 解密内容
+            let decrypted = await crypto.subtle.decrypt(
+                {
+                    name: "AES-CBC",
+                    iv
+                },
+                await (this.aesKey || this.startAes),
+                buffer
+            );
+
+            let jsonStr = new TextDecoder().decode(decrypted);
+            return JSON.parse(jsonStr);
+        } else {
+            let jsonStr = new TextDecoder().decode(buffer);
+            return JSON.parse(jsonStr);
+        }
     }
 }
 

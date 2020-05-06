@@ -30,10 +30,10 @@ class KorokLeaf extends SimpleEvent {
     }
 
     // 发送数据
-    send(data) {
+    async send(data) {
         let { korok } = this;
         if (this[CONNECTTYPE] == "ws" && korok) {
-            korok.socket.send(korok._encry({
+            korok.socket.send(await korok._encry({
                 type: "repost",
                 leafIds: [this[LEAFID]],
                 data: data

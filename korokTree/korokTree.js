@@ -19,8 +19,8 @@ class KorokTree extends EventEmitter {
         // 关闭修正
         this.on("leaf-close", (e) => {
             // 通知干掉相应id
-            this.leafs.forEach(leaf => {
-                leaf.ws.send(leaf._encry({
+            this.leafs.forEach(async leaf => {
+                leaf.ws.send(await leaf._encry({
                     type: "deleteleaf",
                     data: {
                         id: e.leaf.id
@@ -55,8 +55,8 @@ class KorokTree extends EventEmitter {
                     });
 
                     // 给其他leafs发送添加指令
-                    this.leafs.forEach(leaf => {
-                        leaf.ws.send(leaf._encry({
+                    this.leafs.forEach(async leaf => {
+                        leaf.ws.send(await leaf._encry({
                             type: "addleaf",
                             data: {
                                 id: kt.id

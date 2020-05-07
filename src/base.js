@@ -18,5 +18,8 @@
 
     //<!--KorokLeaf-->
 
+    Korok.version = "{{version}}";
+    Korok.v = "{{versionCode}}";
+
     return Korok;
 });

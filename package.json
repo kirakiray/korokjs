@@ -1,7 +1,7 @@
 {
-  "name": "korokjs",
+  "name": "korok.js",
   "version": "1.0.0",
-  "description": "",
+  "description": "A library that allows browser data to communicate",
   "main": "index.js",
   "directories": {
     "test": "test"
@@ -10,9 +10,26 @@
     "server": "node --inspect server/main",
     "watch": "node scripts/watch.js"
   },
-  "author": "",
+  "author": {
+    "name": "YAO",
+    "email": "kirayao@hotmail.com",
+    "url": "https://kirakiray.com/"
+  },
   "license": "MIT",
   "devDependencies": {
-    "js-beautify": "^1.10.0"
+    "js-beautify": "^1.10.0",
+    "uglify-es": "^3.3.9"
+  },
+  "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kirakiray/korokjs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kirakiray/korokjs/issues"
+  },
+  "homepage": "https://github.com/kirakiray/korokjs#readme",
+  "watchjs": {
+    "startyear": "2018"
   }
 }

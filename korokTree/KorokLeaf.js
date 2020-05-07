@@ -19,11 +19,28 @@ class KorokLeaf extends EventEmitter {
         // 初始化相应数据
         this.id = getRandom();
 
+        // 最开始的rsakey
+        let startRsa;
+
         if (encryption) {
             // 是否加密数据
-            this.encryption = true;
+            // 1是准备使用初始aesKey
+            // 2已经抛弃使用初始aesKey，等待接收更新aesKey
+            // 3使用更新后的aesKey
+            this.encryption = 1;
 
             this.aesKey = "";
+
+            startRsa = crypto.subtle.generateKey(
+                {
+                    name: "RSA-OAEP",
+                    modulusLength: 2048,
+                    publicExponent: new Uint8Array([1, 0, 1]),
+                    hash: "SHA-256",
+                },
+                true,
+                ["encrypt", "decrypt"]
+            );
 
             // 初始aes
             this.startAes = crypto.subtle.importKey("jwk", defaultAes || aesKey,
@@ -34,6 +51,18 @@ class KorokLeaf extends EventEmitter {
 
 
         ws.onopen = async (e) => {
+            let pk = "";
+
+            if (encryption) {
+                let sRsa = await startRsa;
+
+                // 转换为jwk
+                pk = await crypto.subtle.exportKey(
+                    "jwk",
+                    sRsa.publicKey
+                );
+            }
+
             // 发送初始配置数据
             ws.send(await this._encry({
                 type: "init",
@@ -42,7 +71,8 @@ class KorokLeaf extends EventEmitter {
                 // 所有同辈数据
                 leafs: Array.from(tree.leafs).map(e => {
                     return { id: e.id };
-                })
+                }),
+                pk
             }));
         }
 
@@ -50,6 +80,32 @@ class KorokLeaf extends EventEmitter {
             let d = await this._decry(e.data);
 
             switch (d.type) {
+                case "initAes":
+                    // 初始化最开始的aeskey
+                    let new_aes = new Uint8Array(d.aes.split(","));
+
+                    let sRsa = await startRsa;
+
+                    // 私钥解密新aes内容
+                    let decrypted = await crypto.subtle.decrypt(
+                        {
+                            name: "RSA-OAEP"
+                        },
+                        sRsa.privateKey,
+                        new_aes
+                    );
+
+                    let dec = new TextDecoder().decode(decrypted);
+
+                    // 转化为aesKey对象
+                    let new_aes_jwk = JSON.parse(dec);
+
+                    this.aesKey = crypto.subtle.importKey("jwk", new_aes_jwk,
+                        "AES-CBC",
+                        true,
+                        ["encrypt", "decrypt"]);
+
+                    break;
                 case "msg":
                     let opt = {
                         data: d.data,

@@ -12,11 +12,14 @@ const iv = new Uint8Array([94, 206, 139, 176, 239, 198, 216, 25, 191, 15, 7, 167
 
 class Korok extends SimpleEvent {
     constructor(opts = {}) {
+        super();
         let defaults = {
             encryption: true
         };
         Object.assign(defaults, opts);
-        super();
+        if (defaults.encryption) {
+            this.encryption = true;
+        }
         // 远程链接地址
         this.url = "localhost:8811";
         this[KOROKID] = "";
@@ -24,6 +27,8 @@ class Korok extends SimpleEvent {
         this[STATE] = "pendding";
         // 同辈
         this[LEAFS] = [];
+        // 重连次数
+        this.reconnect = 5;
         // 自有信息
         this[INFOS] = new Proxy({
             ua: ""
@@ -53,19 +58,6 @@ class Korok extends SimpleEvent {
                 return true;
             }
         });
-
-        if (defaults.encryption) {
-            this.encryption = true;
-
-            this[AESKEY] = "";
-
-            // 设置生成key
-            this[STARTAES] = crypto.subtle.importKey("jwk",
-                aesKey,
-                "AES-CBC",
-                true,
-                ["encrypt", "decrypt"]);
-        }
     }
 
     get id() {
@@ -93,6 +85,21 @@ class Korok extends SimpleEvent {
 
     // 初始化
     async init() {
+        // 清空初始数据
+        this[KOROKID] = "";
+        this[STATE] = "pendding";
+
+        if (this.encryption) {
+            this[AESKEY] = "";
+
+            // 设置生成key
+            this[STARTAES] = crypto.subtle.importKey("jwk",
+                aesKey,
+                "AES-CBC",
+                true,
+                ["encrypt", "decrypt"]);
+        }
+
         // 多窗口数据数据同步库
         const socket = this.socket = new WebSocket(/^ws/.test(this.url) ? this.url : `ws://${this.url}`);
         socket.binaryType = "arraybuffer";
@@ -102,6 +109,53 @@ class Korok extends SimpleEvent {
 
             switch (d.type) {
                 case "init":
+                    // 判断是否加密层
+                    if (this.encryption) {
+                        // 生成rsa对象
+                        let rsaPublic = await crypto.subtle.importKey(
+                            "jwk",
+                            d.pk,
+                            {
+                                name: "RSA-OAEP",
+                                hash: { name: "SHA-256" }
+                            },
+                            true,
+                            ["encrypt"]
+                        );
+
+                        // 重新生成aeskey
+                        let aesKey = crypto.subtle.generateKey(
+                            {
+                                name: "AES-CBC",
+                                length: 256
+                            },
+                            true,
+                            ["encrypt", "decrypt"]
+                        );
+
+                        let key = await aesKey;
+                        // 导出jwk
+                        let newAesJwk = await crypto.subtle.exportKey("jwk", key);
+
+                        // rsa加密对象
+                        let encodedAesJwk = (new TextEncoder()).encode(JSON.stringify(newAesJwk));
+                        let ciphertext = await crypto.subtle.encrypt(
+                            {
+                                name: "RSA-OAEP"
+                            },
+                            rsaPublic,
+                            encodedAesJwk
+                        );
+
+                        socket.send(await this._encry({
+                            type: "initAes",
+                            aes: new Uint8Array(ciphertext).toString()
+                        }));
+
+                        // 重置aesKey
+                        this[AESKEY] = aesKey;
+                    }
+
                     this[KOROKID] = d.id;
                     this[STATE] = "finish";
                     d.leafs.forEach(opt => {
@@ -160,7 +214,19 @@ class Korok extends SimpleEvent {
         socket.onclose = (e) => {
             if (this[STATE] != "error") {
                 this[STATE] = "close";
-                clearInterval(this[PTIMER]);
+                clearInterval(this[PTIMER])
+                this.emit("close", {
+                    socket
+                });
+
+                this.reconnect--;
+
+                if (this.reconnect > 0) {
+                    // 一秒后重试
+                    setTimeout(() => {
+                        this.init();
+                    }, 1000);
+                }
             }
         }
 
@@ -225,6 +291,6 @@ class Korok extends SimpleEvent {
         this.socket.send(await this._encry({
             type: "msg",
             data
-        }));
+        })); 
     }
 }
